@@ -3,6 +3,7 @@
 import { useAppStore } from '@/lib/store'
 import { restaurants } from '@/lib/data'
 import { CrowdBadge } from '@/components/menza/screens/restaurants-screen'
+import { computeConfidence, computeWeightedCrowdScore, formatTimeAgo } from '@/lib/crowd'
 import {
   ArrowLeft,
   TrendingUp,
@@ -12,8 +13,10 @@ import {
   Clock,
   Radio,
   CheckCircle,
+  AlertTriangle,
+  BadgeCheck,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 function CrowdChart({ predictions, isPremium }: { predictions: { time: string; level: number }[]; isPremium: boolean }) {
   const maxLevel = 100
@@ -50,12 +53,51 @@ function CrowdChart({ predictions, isPremium }: { predictions: { time: string; l
   )
 }
 
+function ConfidenceChip({ label, count }: { label: 'Niska' | 'Srednja' | 'Visoka'; count: number }) {
+  const styles =
+    label === 'Visoka'
+      ? 'bg-[#49b867]/10 text-[#49b867]'
+      : label === 'Srednja'
+        ? 'bg-[#f68620]/10 text-[#f68620]'
+        : 'bg-[#ef2723]/10 text-[#ef2723]'
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold ${styles}`}>
+      {label} · {count}
+    </span>
+  )
+}
+
 export function CrowdScreen() {
   const { goBack, navigate, selectRestaurant, isPremium, reportCrowd, selectedCity } = useAppStore()
+  const crowdReportsByRestaurant = useAppStore((s) => s.crowdReportsByRestaurant)
+  const anomalyUntilByRestaurant = useAppStore((s) => s.crowdAnomalyUntilByRestaurant)
+  const verifiedByRestaurant = useAppStore((s) => s.verifiedCrowdByRestaurant)
+
   const [reportedId, setReportedId] = useState<string | null>(null)
   const [showReportSuccess, setShowReportSuccess] = useState(false)
 
-  const cityRestaurants = restaurants.filter(r => r.city === selectedCity)
+  const cityRestaurants = restaurants.filter((r) => r.city === selectedCity)
+
+  const enrichedRestaurants = useMemo(() => {
+    const now = Date.now()
+    return cityRestaurants.map((r) => {
+      const reports = crowdReportsByRestaurant[r.id] ?? []
+      const effective = computeWeightedCrowdScore({ reports, fallbackLevel: r.crowdLevel, now })
+      const confidence = computeConfidence({ reports, now })
+      const anomalyUntil = anomalyUntilByRestaurant[r.id]
+      const anomalyActive = typeof anomalyUntil === 'number' && anomalyUntil > now
+      return {
+        ...r,
+        effectiveCrowdLevel: effective.level,
+        lastUpdateText: formatTimeAgo(confidence.lastUpdateAt, now),
+        confidenceLabel: confidence.label,
+        reportCount24h: confidence.reportCount24h,
+        anomalyActive,
+        verified: Boolean(verifiedByRestaurant[r.id]),
+      }
+    })
+  }, [cityRestaurants, crowdReportsByRestaurant, anomalyUntilByRestaurant, verifiedByRestaurant])
 
   const trendIcon = (trend: 'rising' | 'falling' | 'stable') => {
     if (trend === 'rising') return <TrendingUp size={14} className="text-[#ef2723]" />
@@ -71,7 +113,7 @@ export function CrowdScreen() {
 
   const handleReport = (restaurantId: string, level: 'low' | 'medium' | 'high') => {
     setReportedId(restaurantId)
-    reportCrowd()
+    reportCrowd(restaurantId, level)
     setShowReportSuccess(true)
     setTimeout(() => {
       setShowReportSuccess(false)
@@ -84,7 +126,11 @@ export function CrowdScreen() {
       {/* Header */}
       <div className="bg-background px-5 pt-4 pb-4">
         <div className="flex items-center gap-3 mb-1">
-          <button onClick={goBack} className="w-10 h-10 rounded-xl flex items-center justify-center active:bg-[#f3f3f3] transition-colors" aria-label="Natrag">
+          <button
+            onClick={goBack}
+            className="w-10 h-10 rounded-xl flex items-center justify-center active:bg-[#f3f3f3] transition-colors"
+            aria-label="Natrag"
+          >
             <ArrowLeft size={22} className="text-[#252525]" />
           </button>
           <div className="flex-1">
@@ -106,25 +152,57 @@ export function CrowdScreen() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pt-4 pb-6">
         <div className="flex flex-col gap-4">
-          {cityRestaurants.map((restaurant) => (
+          {enrichedRestaurants.map((restaurant) => (
             <div key={restaurant.id} className="bg-background rounded-2xl overflow-hidden">
               {/* Restaurant header */}
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => { selectRestaurant(restaurant.id); navigate('restaurant-detail') }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { selectRestaurant(restaurant.id); navigate('restaurant-detail') } }}
+                onClick={() => {
+                  selectRestaurant(restaurant.id)
+                  navigate('restaurant-detail')
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    selectRestaurant(restaurant.id)
+                    navigate('restaurant-detail')
+                  }
+                }}
                 className="flex items-center gap-3 p-4 pb-3 cursor-pointer active:bg-[#f3f3f3]/50 transition-colors"
               >
-                <img src={restaurant.imageUrl} alt={restaurant.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" crossOrigin="anonymous" />
+                <img
+                  src={restaurant.imageUrl}
+                  alt={restaurant.name}
+                  className="w-12 h-12 rounded-xl object-cover flex-shrink-0"
+                  crossOrigin="anonymous"
+                />
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-[#252525] text-sm line-clamp-1">{restaurant.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <CrowdBadge level={restaurant.crowdLevel} />
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-[#252525] text-sm line-clamp-1">{restaurant.name}</h3>
+                    {restaurant.verified && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#49b867]/10 text-[#49b867] text-[10px] font-semibold">
+                        <BadgeCheck size={12} />
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <CrowdBadge level={restaurant.effectiveCrowdLevel} />
                     <div className="flex items-center gap-1">
                       {trendIcon(restaurant.crowdTrend)}
                       <span className="text-[10px] text-[#6e6e6e]">{trendText(restaurant.crowdTrend)}</span>
                     </div>
+                    <ConfidenceChip label={restaurant.confidenceLabel} count={restaurant.reportCount24h} />
+                    {restaurant.anomalyActive && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[#ef2723]/10 text-[#ef2723] text-[10px] font-semibold">
+                        <AlertTriangle size={12} />
+                        Spike
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Clock size={11} className="text-[#afafaf]" />
+                    <span className="text-[10px] text-[#afafaf]">Ažurirano: {restaurant.lastUpdateText}</span>
                   </div>
                 </div>
               </div>
@@ -141,7 +219,7 @@ export function CrowdScreen() {
               {/* Pattern info */}
               <div className="px-4 pb-3 pt-1">
                 <p className="text-[10px] text-[#6e6e6e]">
-                  Obicno najguzva u <span className="font-semibold text-[#252525]">{restaurant.crowdPattern.peakTime}</span>, 
+                  Obicno najguzva u <span className="font-semibold text-[#252525]">{restaurant.crowdPattern.peakTime}</span>,
                   prazno od <span className="font-semibold text-[#49b867]">{restaurant.crowdPattern.quietTime}</span>
                 </p>
               </div>
@@ -157,19 +235,28 @@ export function CrowdScreen() {
                 ) : (
                   <div className="flex gap-2">
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleReport(restaurant.id, 'low') }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleReport(restaurant.id, 'low')
+                      }}
                       className="flex-1 py-2 rounded-lg bg-[#49b867]/10 text-[#49b867] text-[11px] font-semibold active:scale-95 transition-transform"
                     >
                       Slobodno
                     </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleReport(restaurant.id, 'medium') }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleReport(restaurant.id, 'medium')
+                      }}
                       className="flex-1 py-2 rounded-lg bg-[#f68620]/10 text-[#f68620] text-[11px] font-semibold active:scale-95 transition-transform"
                     >
                       Umjereno
                     </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleReport(restaurant.id, 'high') }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleReport(restaurant.id, 'high')
+                      }}
                       className="flex-1 py-2 rounded-lg bg-[#ef2723]/10 text-[#ef2723] text-[11px] font-semibold active:scale-95 transition-transform"
                     >
                       Guzva

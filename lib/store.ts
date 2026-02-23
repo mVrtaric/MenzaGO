@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import type { CrowdLevel, CrowdReport } from '@/lib/crowd'
+import { getReportsInWindow, getUserTrustWeight, crowdLevelToScore, computeWeightedCrowdScore } from '@/lib/crowd'
 
 export type Screen =
   | 'welcome'
@@ -49,6 +51,11 @@ interface AppState {
   // Budget tracking
   monthlySpent: number
 
+  // Crowd trust layer
+  crowdReportsByRestaurant: Record<string, CrowdReport[]>
+  crowdAnomalyUntilByRestaurant: Record<string, number | undefined>
+  verifiedCrowdByRestaurant: Record<string, boolean>
+
   // Actions
   navigate: (screen: Screen) => void
   goBack: () => void
@@ -61,7 +68,7 @@ interface AppState {
   login: (name: string) => void
   logout: () => void
   addPoints: (amount: number) => void
-  reportCrowd: () => void
+  reportCrowd: (restaurantId: string, level: CrowdLevel) => void
   submitReview: () => void
   togglePremium: () => void
   setVegetarianFilter: (v: boolean) => void
@@ -71,7 +78,7 @@ interface AppState {
   earnBadge: (id: string) => void
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   currentScreen: 'welcome',
   previousScreen: null,
   screenHistory: [],
@@ -101,6 +108,11 @@ export const useAppStore = create<AppState>((set) => ({
   // Budget
   monthlySpent: 42.60,
 
+  // Crowd trust layer
+  crowdReportsByRestaurant: {},
+  crowdAnomalyUntilByRestaurant: {},
+  verifiedCrowdByRestaurant: {},
+
   navigate: (screen) =>
     set((state) => ({
       currentScreen: screen,
@@ -119,14 +131,11 @@ export const useAppStore = create<AppState>((set) => ({
       }
     }),
 
-  selectRestaurant: (id) =>
-    set({ selectedRestaurantId: id }),
+  selectRestaurant: (id) => set({ selectedRestaurantId: id }),
 
-  selectMeal: (id) =>
-    set({ selectedMealId: id }),
+  selectMeal: (id) => set({ selectedMealId: id }),
 
-  setCity: (city) =>
-    set({ selectedCity: city }),
+  setCity: (city) => set({ selectedCity: city }),
 
   toggleFavoriteRestaurant: (id) =>
     set((state) => ({
@@ -142,23 +151,58 @@ export const useAppStore = create<AppState>((set) => ({
         : [...state.favoriteMeals, id],
     })),
 
-  setSidebarOpen: (open) =>
-    set({ sidebarOpen: open }),
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
-  login: (name) =>
-    set({ isLoggedIn: true, userName: name, currentScreen: 'home', screenHistory: [] }),
+  login: (name) => set({ isLoggedIn: true, userName: name, currentScreen: 'home', screenHistory: [] }),
 
-  logout: () =>
-    set({ isLoggedIn: false, userName: '', currentScreen: 'welcome', screenHistory: [] }),
+  logout: () => set({ isLoggedIn: false, userName: '', currentScreen: 'welcome', screenHistory: [] }),
 
-  addPoints: (amount) =>
-    set((state) => ({ points: state.points + amount })),
+  addPoints: (amount) => set((state) => ({ points: state.points + amount })),
 
-  reportCrowd: () =>
-    set((state) => ({
-      crowdReports: state.crowdReports + 1,
-      points: state.points + 5,
-    })),
+  reportCrowd: (restaurantId, level) =>
+    set((state) => {
+      const now = Date.now()
+      const trustWeight = getUserTrustWeight({
+        points: state.points,
+        crowdReports: state.crowdReports,
+        reviewsCount: state.reviewsCount,
+        isPremium: state.isPremium,
+      })
+
+      const prevReports = state.crowdReportsByRestaurant[restaurantId] ?? []
+      // Keep the list small by pruning very old items.
+      const pruned = prevReports.filter((r) => r.at >= now - 48 * 60 * 60 * 1000)
+
+      const prevScore = pruned.length
+        ? computeWeightedCrowdScore({ reports: pruned, fallbackLevel: level, now }).score
+        : crowdLevelToScore(level)
+
+      const nextReports: CrowdReport[] = [...pruned, { at: now, level, weight: trustWeight }]
+
+      const window5m = getReportsInWindow(nextReports, now, 5 * 60 * 1000)
+      const window24h = getReportsInWindow(nextReports, now, 24 * 60 * 60 * 1000)
+
+      const nextScore = computeWeightedCrowdScore({ reports: nextReports, fallbackLevel: level, now }).score
+
+      const baselinePer5m = window24h.length / 288 // 24h / 5min
+      const spikeByVolume = window5m.length >= Math.max(4, Math.ceil(baselinePer5m * 6))
+      const spikeByChange = window5m.length >= 3 && Math.abs(nextScore - prevScore) >= 25
+
+      const anomalyUntil = (spikeByVolume || spikeByChange) ? now + 15 * 60 * 1000 : state.crowdAnomalyUntilByRestaurant[restaurantId]
+
+      return {
+        crowdReports: state.crowdReports + 1,
+        points: state.points + 5,
+        crowdReportsByRestaurant: {
+          ...state.crowdReportsByRestaurant,
+          [restaurantId]: nextReports,
+        },
+        crowdAnomalyUntilByRestaurant: {
+          ...state.crowdAnomalyUntilByRestaurant,
+          [restaurantId]: anomalyUntil,
+        },
+      }
+    }),
 
   submitReview: () =>
     set((state) => ({
@@ -166,11 +210,9 @@ export const useAppStore = create<AppState>((set) => ({
       points: state.points + 10,
     })),
 
-  togglePremium: () =>
-    set((state) => ({ isPremium: !state.isPremium })),
+  togglePremium: () => set((state) => ({ isPremium: !state.isPremium })),
 
-  setVegetarianFilter: (v) =>
-    set({ isVegetarianFilter: v }),
+  setVegetarianFilter: (v) => set({ isVegetarianFilter: v }),
 
   toggleAllergenExclusion: (id) =>
     set((state) => ({
@@ -179,16 +221,12 @@ export const useAppStore = create<AppState>((set) => ({
         : [...state.excludedAllergens, id],
     })),
 
-  setBudgetMax: (max) =>
-    set({ budgetMax: max }),
+  setBudgetMax: (max) => set({ budgetMax: max }),
 
-  addSpending: (amount) =>
-    set((state) => ({ monthlySpent: state.monthlySpent + amount })),
+  addSpending: (amount) => set((state) => ({ monthlySpent: state.monthlySpent + amount })),
 
   earnBadge: (id) =>
     set((state) => ({
-      earnedBadges: state.earnedBadges.includes(id)
-        ? state.earnedBadges
-        : [...state.earnedBadges, id],
+      earnedBadges: state.earnedBadges.includes(id) ? state.earnedBadges : [...state.earnedBadges, id],
     })),
 }))
