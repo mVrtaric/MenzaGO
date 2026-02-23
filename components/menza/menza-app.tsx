@@ -6,6 +6,7 @@ import { Sidebar } from './sidebar'
 import { WelcomeScreen } from './screens/welcome-screen'
 import { LoginScreen } from './screens/login-screen'
 import { RegisterScreen } from './screens/register-screen'
+import { OnboardingScreen } from './screens/onboarding-screen'
 import { HomeScreen } from './screens/home-screen'
 import { RestaurantsScreen } from './screens/restaurants-screen'
 import { RestaurantDetailScreen } from './screens/restaurant-detail-screen'
@@ -31,6 +32,8 @@ export function MenzaApp() {
         return <LoginScreen />
       case 'register':
         return <RegisterScreen />
+      case 'onboarding':
+        return <OnboardingScreen />
       case 'home':
         return <HomeScreen />
       case 'restaurants':

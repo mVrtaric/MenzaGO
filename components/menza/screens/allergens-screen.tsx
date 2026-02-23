@@ -2,10 +2,10 @@
 
 import { useAppStore } from '@/lib/store'
 import { allergensList } from '@/lib/data'
-import { ArrowLeft, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Check } from 'lucide-react'
 
 export function AllergensScreen() {
-  const { goBack } = useAppStore()
+  const { goBack, excludedAllergens, toggleAllergenExclusion } = useAppStore()
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -18,7 +18,10 @@ export function AllergensScreen() {
         >
           <ArrowLeft size={22} className="text-[#252525]" />
         </button>
-        <h1 className="text-lg font-bold text-[#252525]">ALERGENI</h1>
+        <div className="flex-1">
+          <h1 className="text-lg font-bold text-[#252525]">ALERGENI</h1>
+          <p className="text-[10px] text-[#6e6e6e]">Odaberi alergene koje želiš isključiti</p>
+        </div>
       </div>
 
       {/* Info */}
@@ -34,20 +37,29 @@ export function AllergensScreen() {
       {/* Allergens List */}
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pb-8">
         <div className="flex flex-col gap-2">
-          {allergensList.map((allergen, index) => (
-            <div
-              key={allergen.id}
-              className="flex items-start gap-3 py-3 border-b border-[#f3f3f3] last:border-0 fade-in"
-              style={{ animationDelay: `${index * 30}ms` }}
-            >
-              <span className="w-8 h-8 rounded-full bg-[#49b867]/10 text-[#49b867] text-xs font-bold flex items-center justify-center flex-shrink-0">
-                {allergen.id}
-              </span>
-              <p className="text-sm text-[#252525] leading-relaxed pt-1">
-                {allergen.name}
-              </p>
-            </div>
-          ))}
+          {allergensList.map((allergen, index) => {
+            const checked = excludedAllergens.includes(allergen.id)
+            return (
+              <button
+                key={allergen.id}
+                onClick={() => toggleAllergenExclusion(allergen.id)}
+                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-colors fade-in ${
+                  checked ? 'border-[#49b867]/30 bg-[#49b867]/5' : 'border-[#e3e3e3]'
+                }`}
+                style={{ animationDelay: `${index * 20}ms` }}
+              >
+                <span className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  checked ? 'bg-[#49b867] text-[#ffffff]' : 'bg-[#f3f3f3] text-[#afafaf]'
+                }`}>
+                  <Check size={16} />
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#252525]">{allergen.id}. {allergen.name}</p>
+                  {checked && <p className="text-[10px] text-[#6e6e6e] mt-0.5">Isključen</p>}
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>

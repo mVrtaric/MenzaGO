@@ -6,6 +6,7 @@ export type Screen =
   | 'welcome'
   | 'login'
   | 'register'
+  | 'onboarding'
   | 'home'
   | 'restaurants'
   | 'restaurant-detail'
@@ -51,6 +52,12 @@ interface AppState {
   // Budget tracking
   monthlySpent: number
 
+  // Notifications
+  notificationsEnabled: boolean
+
+  // Onboarding
+  hasCompletedOnboarding: boolean
+
   // Crowd trust layer
   crowdReportsByRestaurant: Record<string, CrowdReport[]>
   crowdAnomalyUntilByRestaurant: Record<string, number | undefined>
@@ -85,6 +92,8 @@ interface AppState {
   earnBadge: (id: string) => void
   setImproveRecommendations: (enabled: boolean) => void
   trackMealInteraction: (input: { mealId: string; restaurantId: string; isVegetarian: boolean }) => void
+  setNotificationsEnabled: (enabled: boolean) => void
+  completeOnboarding: () => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -115,7 +124,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   budgetMax: null,
 
   // Budget
-  monthlySpent: 42.60,
+  monthlySpent: 42.6,
+
+  // Notifications
+  notificationsEnabled: true,
+
+  // Onboarding
+  hasCompletedOnboarding: false,
 
   // Crowd trust layer
   crowdReportsByRestaurant: {},
@@ -169,9 +184,23 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
-  login: (name) => set({ isLoggedIn: true, userName: name, currentScreen: 'home', screenHistory: [] }),
+  login: (name) =>
+    set((state) => ({
+      isLoggedIn: true,
+      userName: name,
+      currentScreen: state.hasCompletedOnboarding ? 'home' : 'onboarding',
+      screenHistory: [],
+    })),
 
-  logout: () => set({ isLoggedIn: false, userName: '', currentScreen: 'welcome', screenHistory: [] }),
+  logout: () =>
+    set((state) => ({
+      isLoggedIn: false,
+      userName: '',
+      currentScreen: 'welcome',
+      screenHistory: [],
+      // Keep onboarding completion so returning users aren't forced back into it.
+      hasCompletedOnboarding: state.hasCompletedOnboarding,
+    })),
 
   addPoints: (amount) => set((state) => ({ points: state.points + amount })),
 
@@ -264,4 +293,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         [restaurantId]: (state.restaurantInteractionCounts[restaurantId] ?? 0) + 1,
       },
     })),
+
+  setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
+
+  completeOnboarding: () => set({ hasCompletedOnboarding: true }),
 }))
