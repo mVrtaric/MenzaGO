@@ -4,6 +4,7 @@ import { useAppStore } from '@/lib/store'
 import { restaurants as allRestaurants } from '@/lib/data'
 import { CrowdBadge } from '@/components/menza/screens/restaurants-screen'
 import { CrowdHeatmap } from '@/components/menza/crowd-heatmap'
+import { CrowdRealMap } from '@/components/menza/crowd-real-map'
 import { CrowdCompareDialog, type CompareRestaurant } from '@/components/menza/crowd-compare-dialog'
 import { computeConfidence, computeWeightedCrowdScore, formatTimeAgo } from '@/lib/crowd'
 import {
@@ -84,6 +85,8 @@ export function CrowdScreen() {
 
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
+
+  const googleMapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 
   const cityRestaurants = allRestaurants.filter((r) => r.city === selectedCity)
 
@@ -241,27 +244,48 @@ export function CrowdScreen() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pt-4 pb-6">
         {view === 'map' ? (
-          <CrowdHeatmap
-            city={selectedCity}
-            restaurants={enrichedRestaurants.map((r) => ({
-              id: r.id,
-              name: r.name,
-              address: r.address,
-              imageUrl: r.imageUrl,
-              crowdLevel: r.crowdLevel,
-              effectiveCrowdLevel: r.effectiveCrowdLevel,
-              crowdPredictions: r.crowdPredictions,
-              confidenceLabel: r.confidenceLabel,
-              reportCount24h: r.reportCount24h,
-              lastUpdateText: r.lastUpdateText,
-            }))}
-            isPremium={isPremium}
-            onOpenDetails={openDetails}
-            onToggleCompare={(id) => {
-              toggleCompare(id)
-            }}
-            selectedCompareIds={compareIds}
-          />
+          googleMapsKey && selectedCity === 'Zagreb' ? (
+            <CrowdRealMap
+              apiKey={googleMapsKey}
+              city={selectedCity}
+              restaurants={enrichedRestaurants.map((r) => ({
+                id: r.id,
+                name: r.name,
+                address: r.address,
+                imageUrl: r.imageUrl,
+                crowdLevel: r.crowdLevel,
+                effectiveCrowdLevel: r.effectiveCrowdLevel,
+                crowdPredictions: r.crowdPredictions,
+                confidenceLabel: r.confidenceLabel,
+                reportCount24h: r.reportCount24h,
+                lastUpdateText: r.lastUpdateText,
+              }))}
+              isPremium={isPremium}
+              onOpenDetails={openDetails}
+              onToggleCompare={toggleCompare}
+              selectedCompareIds={compareIds}
+            />
+          ) : (
+            <CrowdHeatmap
+              city={selectedCity}
+              restaurants={enrichedRestaurants.map((r) => ({
+                id: r.id,
+                name: r.name,
+                address: r.address,
+                imageUrl: r.imageUrl,
+                crowdLevel: r.crowdLevel,
+                effectiveCrowdLevel: r.effectiveCrowdLevel,
+                crowdPredictions: r.crowdPredictions,
+                confidenceLabel: r.confidenceLabel,
+                reportCount24h: r.reportCount24h,
+                lastUpdateText: r.lastUpdateText,
+              }))}
+              isPremium={isPremium}
+              onOpenDetails={openDetails}
+              onToggleCompare={toggleCompare}
+              selectedCompareIds={compareIds}
+            />
+          )
         ) : (
           <div className="flex flex-col gap-4">
             {enrichedRestaurants.map((restaurant) => (
