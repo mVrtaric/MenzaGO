@@ -25,6 +25,7 @@ import { useMemo, useState } from 'react'
 
 function CrowdChart({ predictions, isPremium }: { predictions: { time: string; level: number }[]; isPremium: boolean }) {
   const maxLevel = 100
+  const barMaxHeight = 80
   return (
     <div className="relative">
       {!isPremium && (
@@ -41,15 +42,15 @@ function CrowdChart({ predictions, isPremium }: { predictions: { time: string; l
       )}
       <div className="flex items-end gap-1.5 h-24">
         {predictions.map((p, i) => {
-          const height = (p.level / maxLevel) * 100
+          const heightPx = (p.level / maxLevel) * barMaxHeight
           const color = p.level > 75 ? '#ef2723' : p.level > 45 ? '#f68620' : '#49b867'
           return (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1">
+            <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1 min-h-0">
               <div
-                className="w-full rounded-t-md transition-all duration-500"
-                style={{ height: `${height}%`, backgroundColor: color, minHeight: 4 }}
+                className="w-full rounded-t-md transition-all duration-500 shrink-0"
+                style={{ height: Math.max(4, heightPx), backgroundColor: color }}
               />
-              <span className="text-[9px] text-[#afafaf]">{p.time}</span>
+              <span className="text-[9px] text-[#afafaf] shrink-0">{p.time}</span>
             </div>
           )
         })}
@@ -76,6 +77,7 @@ function ConfidenceChip({ label, count }: { label: 'Niska' | 'Srednja' | 'Visoka
 export function CrowdScreen() {
   const { goBack, navigate, selectRestaurant, isPremium, reportCrowd, selectedCity } = useAppStore()
   const crowdReportsByRestaurant = useAppStore((s) => s.crowdReportsByRestaurant)
+  const reportSessionId = useAppStore((s) => s.reportSessionId)
   const anomalyUntilByRestaurant = useAppStore((s) => s.crowdAnomalyUntilByRestaurant)
   const verifiedByRestaurant = useAppStore((s) => s.verifiedCrowdByRestaurant)
 
@@ -158,7 +160,14 @@ export function CrowdScreen() {
     return 'Stabilno'
   }
 
+  const getMyReportedLevel = (restaurantId: string): 'low' | 'medium' | 'high' | null => {
+    const reports = crowdReportsByRestaurant[restaurantId] ?? []
+    const mine = reports.find((r) => r.sessionId === reportSessionId)
+    return mine?.level ?? null
+  }
+
   const handleReport = (restaurantId: string, level: 'low' | 'medium' | 'high') => {
+    if (getMyReportedLevel(restaurantId) === level) return // same state = no-op, prevent spam
     setReportedId(restaurantId)
     reportCrowd(restaurantId, level)
     setShowReportSuccess(true)
@@ -309,7 +318,7 @@ export function CrowdScreen() {
                   <img
                     src={restaurant.imageUrl}
                     alt={restaurant.name}
-                    className="w-12 h-12 rounded-xl object-cover flex-shrink-0"
+                    className="w-12 h-12 rounded-xl object-cover shrink-0"
                     crossOrigin="anonymous"
                   />
                   <div className="flex-1 min-w-0">
@@ -386,35 +395,52 @@ export function CrowdScreen() {
                       <span className="text-xs text-[#49b867] font-medium">Prijavljeno!</span>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleReport(restaurant.id, 'low')
-                        }}
-                        className="flex-1 py-2 rounded-lg bg-[#49b867]/10 text-[#49b867] text-[11px] font-semibold active:scale-95 transition-transform"
-                      >
-                        Slobodno
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleReport(restaurant.id, 'medium')
-                        }}
-                        className="flex-1 py-2 rounded-lg bg-[#f68620]/10 text-[#f68620] text-[11px] font-semibold active:scale-95 transition-transform"
-                      >
-                        Umjereno
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleReport(restaurant.id, 'high')
-                        }}
-                        className="flex-1 py-2 rounded-lg bg-[#ef2723]/10 text-[#ef2723] text-[11px] font-semibold active:scale-95 transition-transform"
-                      >
-                        Guzva
-                      </button>
-                    </div>
+                    (() => {
+                      const myLevel = getMyReportedLevel(restaurant.id)
+                      return (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleReport(restaurant.id, 'low')
+                            }}
+                            className={`flex-1 py-2 rounded-lg text-[11px] font-semibold active:scale-95 transition-transform ${
+                              myLevel === 'low'
+                                ? 'bg-[#49b867] text-[#ffffff] ring-2 ring-[#49b867]/50'
+                                : 'bg-[#49b867]/10 text-[#49b867]'
+                            }`}
+                          >
+                            Slobodno
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleReport(restaurant.id, 'medium')
+                            }}
+                            className={`flex-1 py-2 rounded-lg text-[11px] font-semibold active:scale-95 transition-transform ${
+                              myLevel === 'medium'
+                                ? 'bg-[#f68620] text-[#ffffff] ring-2 ring-[#f68620]/50'
+                                : 'bg-[#f68620]/10 text-[#f68620]'
+                            }`}
+                          >
+                            Umjereno
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleReport(restaurant.id, 'high')
+                            }}
+                            className={`flex-1 py-2 rounded-lg text-[11px] font-semibold active:scale-95 transition-transform ${
+                              myLevel === 'high'
+                                ? 'bg-[#ef2723] text-[#ffffff] ring-2 ring-[#ef2723]/50'
+                                : 'bg-[#ef2723]/10 text-[#ef2723]'
+                            }`}
+                          >
+                            Guzva
+                          </button>
+                        </div>
+                      )
+                    })()
                   )}
                 </div>
               </div>

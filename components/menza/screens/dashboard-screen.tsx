@@ -10,6 +10,8 @@ import {
   Leaf,
   BarChart3,
   Mail,
+  FileText,
+  Shield,
 } from 'lucide-react'
 
 function BarChart({ data, maxValue, colorFn }: {
@@ -47,7 +49,7 @@ export function DashboardScreen() {
           </button>
           <div className="flex-1">
             <h1 className="text-lg font-bold text-[#ffffff] tracking-tight">ANALITIKA</h1>
-            <p className="text-xs text-[#ffffff]/50">B2B Dashboard</p>
+            <p className="text-xs text-[#ffffff]/50">Institucionalni dashboard · Anonimni agregirani podaci</p>
           </div>
           <BarChart3 size={20} className="text-[#49b867]" />
         </div>
@@ -132,17 +134,34 @@ export function DashboardScreen() {
           </div>
         </section>
 
-        {/* CTA */}
+        {/* Anonymous aggregate note */}
+        <div className="flex items-start gap-3 p-4 mb-4 bg-[#49b867]/10 rounded-xl border border-[#49b867]/20">
+          <Shield size={20} className="text-[#49b867] shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-xs font-semibold text-[#252525] mb-1">Anonimni agregirani izvještaji</h4>
+            <p className="text-[10px] text-[#6e6e6e] leading-relaxed">
+              Svi podaci su anonimizirani i agregirani. Nema PII-a – u skladu s GDPR. Preuzmite tjedne/mjesečne PDF izvještaje za vašu instituciju.
+            </p>
+          </div>
+        </div>
+
+        {/* Reports download + CTA */}
         <div className="bg-[#252525] rounded-xl p-5 flex flex-col items-center text-center">
           <Award size={28} className="text-[#fda913] mb-2" />
           <h3 className="text-[#ffffff] font-bold text-sm mb-1">Zainteresirani ste?</h3>
-          <p className="text-[#ffffff]/60 text-xs mb-4 leading-relaxed">
-            Kontaktirajte nas za puni pristup analitickom dashboardu za vasu instituciju.
+          <p className="text-[#ffffff]/60 text-xs mb-3 leading-relaxed">
+            Kontaktirajte nas za puni pristup analitičkom dashboardu i PDF izvještajima za vašu instituciju.
           </p>
-          <button className="flex items-center gap-2 px-5 py-3 bg-[#49b867] rounded-xl text-[#ffffff] font-semibold text-sm active:scale-95 transition-transform">
-            <Mail size={16} />
-            Kontaktirajte nas
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full mb-4">
+            <button className="flex items-center justify-center gap-2 flex-1 px-4 py-3 bg-[#ffffff]/10 rounded-xl text-[#ffffff] font-semibold text-sm active:scale-95 transition-transform border border-[#ffffff]/20">
+              <FileText size={16} />
+              Preuzmi izvještaj (PDF)
+            </button>
+            <button className="flex items-center justify-center gap-2 flex-1 px-4 py-3 bg-[#49b867] rounded-xl text-[#ffffff] font-semibold text-sm active:scale-95 transition-transform">
+              <Mail size={16} />
+              Kontaktirajte nas
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -21,6 +21,7 @@ export type Screen =
   | 'profile'
   | 'premium'
   | 'dashboard'
+  | 'meal-planner'
 
 interface AppState {
   currentScreen: Screen
@@ -59,6 +60,7 @@ interface AppState {
   hasCompletedOnboarding: boolean
 
   // Crowd trust layer
+  reportSessionId: string
   crowdReportsByRestaurant: Record<string, CrowdReport[]>
   crowdAnomalyUntilByRestaurant: Record<string, number | undefined>
   verifiedCrowdByRestaurant: Record<string, boolean>
@@ -69,6 +71,9 @@ interface AppState {
   vegetarianMealInteractions: number
   mealInteractionCounts: Record<string, number>
   restaurantInteractionCounts: Record<string, number>
+
+  // Meal planner (Premium)
+  weeklyMealPlan: Record<string, { lunch?: string; dinner?: string }>
 
   // Actions
   navigate: (screen: Screen) => void
@@ -94,6 +99,7 @@ interface AppState {
   trackMealInteraction: (input: { mealId: string; restaurantId: string; isVegetarian: boolean }) => void
   setNotificationsEnabled: (enabled: boolean) => void
   completeOnboarding: () => void
+  setWeeklyMealSlot: (dateKey: string, slot: 'lunch' | 'dinner', mealId: string | null) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -133,6 +139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   hasCompletedOnboarding: false,
 
   // Crowd trust layer
+  reportSessionId: `sess-${Math.random().toString(36).slice(2)}-${Date.now()}`,
   crowdReportsByRestaurant: {},
   crowdAnomalyUntilByRestaurant: {},
   verifiedCrowdByRestaurant: {},
@@ -143,6 +150,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   vegetarianMealInteractions: 0,
   mealInteractionCounts: {},
   restaurantInteractionCounts: {},
+
+  weeklyMealPlan: {},
 
   navigate: (screen) =>
     set((state) => ({
@@ -207,6 +216,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   reportCrowd: (restaurantId, level) =>
     set((state) => {
       const now = Date.now()
+      const sessionId = state.reportSessionId
+
+      const prevReports = state.crowdReportsByRestaurant[restaurantId] ?? []
+      // Remove this user's previous report (replace-on-change).
+      const withoutMine = prevReports.filter((r) => r.sessionId !== sessionId)
+      const myPrevReport = prevReports.find((r) => r.sessionId === sessionId)
+      if (myPrevReport?.level === level) return state // same state = no-op, prevent spam
+
       const trustWeight = getUserTrustWeight({
         points: state.points,
         crowdReports: state.crowdReports,
@@ -214,15 +231,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         isPremium: state.isPremium,
       })
 
-      const prevReports = state.crowdReportsByRestaurant[restaurantId] ?? []
-      // Keep the list small by pruning very old items.
-      const pruned = prevReports.filter((r) => r.at >= now - 48 * 60 * 60 * 1000)
-
+      // Keep list small by pruning very old items (from other users).
+      const pruned = withoutMine.filter((r) => r.at >= now - 48 * 60 * 60 * 1000)
       const prevScore = pruned.length
         ? computeWeightedCrowdScore({ reports: pruned, fallbackLevel: level, now }).score
         : crowdLevelToScore(level)
 
-      const nextReports: CrowdReport[] = [...pruned, { at: now, level, weight: trustWeight }]
+      const nextReports: CrowdReport[] = [...pruned, { at: now, level, weight: trustWeight, sessionId }]
 
       const window5m = getReportsInWindow(nextReports, now, 5 * 60 * 1000)
       const window24h = getReportsInWindow(nextReports, now, 24 * 60 * 60 * 1000)
@@ -297,4 +312,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
 
   completeOnboarding: () => set({ hasCompletedOnboarding: true }),
+
+  setWeeklyMealSlot: (dateKey, slot, mealId) =>
+    set((state) => {
+      const day = { ...(state.weeklyMealPlan[dateKey] ?? {}) }
+      if (mealId) day[slot] = mealId
+      else delete day[slot]
+      const nextPlan = { ...state.weeklyMealPlan }
+      if (Object.keys(day).length) nextPlan[dateKey] = day
+      else delete nextPlan[dateKey]
+      return { weeklyMealPlan: nextPlan }
+    }),
 }))

@@ -36,6 +36,32 @@ export interface Meal {
   }
   isVegetarian: boolean
   trendScore?: number
+  /** Sponsored Meal of the Day: mealId in rotation for sponsored slot */
+  sponsoredUntil?: number
+}
+
+export interface Promotion {
+  id: string
+  restaurantId: string
+  title: string
+  description: string
+  imageUrl?: string
+  ctaLabel?: string
+  ctaUrl?: string
+  validFrom: number
+  validTo: number
+  city?: string
+}
+
+export interface EventPromotion {
+  id: string
+  name: string
+  message: string
+  startDate: number
+  endDate: number
+  city?: string
+  campusId?: string
+  deepLink?: string
 }
 
 export interface Review {
@@ -315,6 +341,90 @@ export const meals: Meal[] = [
   },
 ]
 
+// Sponsored Meal of the Day (rotates by day of week)
+export function getSponsoredMealOfTheDay(): string {
+  const dayIndex = new Date().getDay()
+  const sponsoredIds = ['m4', 'm6', 'm3', 'm1', 'm2', 'm5', 'm4']
+  return sponsoredIds[dayIndex] ?? 'm4'
+}
+
+// Sponsored cafeteria promotions
+export const promotions: Promotion[] = [
+  {
+    id: 'pr1',
+    restaurantId: '4',
+    title: 'Akcija tjedna',
+    description: '-20% na vegetarijanske obroke do petka!',
+    imageUrl: '/images/meal-krpice.jpg',
+    ctaLabel: 'Pogledaj meni',
+    validFrom: Date.now() - 86400000,
+    validTo: Date.now() + 4 * 86400000,
+    city: 'Zagreb',
+  },
+  {
+    id: 'pr2',
+    restaurantId: '1',
+    title: 'Novo u ponudi',
+    description: 'Svjezi gril - Piletina na zaru s povrcem.',
+    ctaLabel: 'Detalji',
+    validFrom: Date.now() - 86400000,
+    validTo: Date.now() + 30 * 86400000,
+    city: 'Zagreb',
+  },
+  {
+    id: 'pr3',
+    restaurantId: '3',
+    title: 'Studentski popust',
+    description: '10% popusta za sve studente s iskaznicom.',
+    validFrom: Date.now() - 86400000,
+    validTo: Date.now() + 7 * 86400000,
+    city: 'Zagreb',
+  },
+]
+
+// Event-based push promotions (student events)
+export const eventPromotions: EventPromotion[] = [
+  {
+    id: 'ev1',
+    name: 'Orijentacija 2026',
+    message: 'Dobrodosli novi brucosi! Restoran Radic ima posebnu ponudu za vas.',
+    startDate: Date.now() - 86400000,
+    endDate: Date.now() + 14 * 86400000,
+    city: 'Zagreb',
+    deepLink: 'restaurant-detail',
+  },
+  {
+    id: 'ev2',
+    name: 'Ispitni rok',
+    message: 'Prosjeceni radni sat u Restoran TTF tijekom ispitnog roka.',
+    startDate: Date.now() - 86400000,
+    endDate: Date.now() + 21 * 86400000,
+    city: 'Zagreb',
+    deepLink: 'restaurant-detail',
+  },
+]
+
+export function getActiveEventPromotions(city: string): EventPromotion[] {
+  const now = Date.now()
+  return eventPromotions.filter(
+    (e) =>
+      e.startDate <= now &&
+      e.endDate >= now &&
+      (e.city == null || e.city === city)
+  )
+}
+
+export function getPromotionsForRestaurant(restaurantId: string, city?: string): Promotion[] {
+  const now = Date.now()
+  return promotions.filter(
+    (p) =>
+      p.restaurantId === restaurantId &&
+      p.validFrom <= now &&
+      p.validTo >= now &&
+      (p.city == null || p.city === city)
+  )
+}
+
 export const reviews: Review[] = [
   {
     id: 'r1',
@@ -372,6 +482,24 @@ export const dashboardData = {
   weeklyRevenue: 12450,
   weeklyWaste: 3.2,
   satisfactionRate: 4.3,
+}
+
+/** Get Monday of the week for a given date */
+export function getWeekStart(d: Date): Date {
+  const x = new Date(d)
+  const day = x.getDay()
+  const diff = x.getDate() - day + (day === 0 ? -6 : 1)
+  x.setDate(diff)
+  return x
+}
+
+/** Get 7 dates starting from the given Monday */
+export function getWeekDates(weekStart: Date): Date[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const x = new Date(weekStart)
+    x.setDate(weekStart.getDate() + i)
+    return x
+  })
 }
 
 export function getLevelForPoints(points: number): { name: string; min: number; max: number } {

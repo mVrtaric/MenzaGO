@@ -4,6 +4,7 @@ export interface CrowdReport {
   at: number // epoch ms
   level: CrowdLevel
   weight: number
+  sessionId?: string // identifies this user's report for replace-on-change
 }
 
 export function getUserTrustWeight(input: {

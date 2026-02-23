@@ -2,7 +2,13 @@
 
 import { useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
-import { restaurants, meals, friendActivities } from '@/lib/data'
+import {
+  restaurants,
+  meals,
+  friendActivities,
+  getSponsoredMealOfTheDay,
+  getActiveEventPromotions,
+} from '@/lib/data'
 import { StarRating } from '@/components/menza/star-rating'
 import { CrowdBadge } from '@/components/menza/screens/restaurants-screen'
 import { computeWeightedCrowdScore } from '@/lib/crowd'
@@ -129,6 +135,18 @@ export function HomeScreen() {
 
   const favRestaurants = useMemo(() => cityRestaurants.filter((r) => favoriteRestaurants.includes(r.id)).slice(0, 3), [cityRestaurants, favoriteRestaurants])
 
+  const sponsoredMealId = getSponsoredMealOfTheDay()
+  const sponsoredMeal = useMemo(() => meals.find((m) => m.id === sponsoredMealId), [sponsoredMealId])
+  const sponsoredRestaurant = useMemo(
+    () => (sponsoredMeal ? restaurants.find((r) => r.id === sponsoredMeal.restaurantId) : null),
+    [sponsoredMeal]
+  )
+
+  const activeEvents = useMemo(
+    () => getActiveEventPromotions(selectedCity),
+    [selectedCity]
+  )
+
   const explanationForMeal = (meal: (typeof meals)[number]): ExplainTag[] => {
     const tags: ExplainTag[] = []
 
@@ -199,6 +217,73 @@ export function HomeScreen() {
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pt-5 pb-6">
+        {/* Sponsored Meal of the Day */}
+        {sponsoredMeal && sponsoredRestaurant && (
+          <section className="mb-6">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                trackMealInteraction({
+                  mealId: sponsoredMeal.id,
+                  restaurantId: sponsoredMeal.restaurantId,
+                  isVegetarian: sponsoredMeal.isVegetarian,
+                })
+                selectMeal(sponsoredMeal.id)
+                navigate('meal-detail')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  trackMealInteraction({
+                    mealId: sponsoredMeal.id,
+                    restaurantId: sponsoredMeal.restaurantId,
+                    isVegetarian: sponsoredMeal.isVegetarian,
+                  })
+                  selectMeal(sponsoredMeal.id)
+                  navigate('meal-detail')
+                }
+              }}
+              className="block w-full bg-gradient-to-r from-[#fda913]/15 to-[#49b867]/15 rounded-2xl overflow-hidden border border-[#fda913]/30 active:scale-[0.99] transition-transform cursor-pointer"
+            >
+              <div className="flex gap-4 p-4">
+                <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0">
+                  <img src={sponsoredMeal.imageUrl} alt={sponsoredMeal.name} className="w-full h-full object-cover" crossOrigin="anonymous" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="inline-block px-2 py-0.5 rounded-full bg-[#fda913]/20 text-[#b87800] text-[10px] font-semibold mb-1.5">
+                    Sponzorirano
+                  </span>
+                  <h3 className="font-bold text-[#252525] text-sm mb-0.5">{sponsoredMeal.name}</h3>
+                  <p className="text-[10px] text-[#6e6e6e] mb-1">{sponsoredRestaurant.name}</p>
+                  <div className="flex items-center gap-2">
+                    <StarRating rating={sponsoredMeal.rating} size={10} />
+                    <span className="text-sm font-bold text-[#49b867]">{sponsoredMeal.price.toFixed(2)} &euro;</span>
+                  </div>
+                </div>
+                <ChevronRight size={18} className="text-[#6e6e6e] self-center shrink-0" />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Event-based promotions */}
+        {activeEvents.length > 0 && (
+          <section className="mb-6">
+            <h2 className="text-sm font-bold text-[#252525] mb-3">Događanja na kampusu</h2>
+            <div className="flex flex-col gap-2">
+              {activeEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="p-4 bg-background rounded-xl border border-[#49b867]/20"
+                >
+                  <p className="text-xs font-semibold text-[#076639] mb-1">{event.name}</p>
+                  <p className="text-xs text-[#6e6e6e]">{event.message}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* AI Recommendations */}
         <section className="mb-6">
           <div className="flex items-start justify-between gap-3 mb-3">

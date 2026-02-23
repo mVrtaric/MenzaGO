@@ -20,7 +20,7 @@ const iconMap: Record<string, React.ElementType> = {
 }
 
 export function PremiumScreen() {
-  const { goBack, isPremium, togglePremium } = useAppStore()
+  const { goBack, isPremium, togglePremium, navigate } = useAppStore()
 
   return (
     <div className="flex flex-col h-full bg-[#f3f3f3]">
@@ -82,16 +82,26 @@ export function PremiumScreen() {
         <div className="flex flex-col gap-3 mb-6">
           {premiumFeatures.map((feature, idx) => {
             const IconComp = iconMap[feature.icon] || Sparkles
+            const isPlanner = feature.id === 'pf3'
+            const isClickable = isPremium && isPlanner
             return (
-              <div key={feature.id} className="bg-background rounded-xl p-4 flex items-start gap-3.5 fade-in" style={{ animationDelay: `${idx * 60}ms` }}>
-                <div className="w-10 h-10 rounded-xl bg-[#49b867]/10 flex items-center justify-center flex-shrink-0">
+              <div
+                key={feature.id}
+                role={isClickable ? 'button' : undefined}
+                tabIndex={isClickable ? 0 : undefined}
+                onClick={isClickable ? () => navigate('meal-planner') : undefined}
+                onKeyDown={isClickable ? (e) => e.key === 'Enter' && navigate('meal-planner') : undefined}
+                className={`bg-background rounded-xl p-4 flex items-start gap-3.5 fade-in ${isClickable ? 'active:scale-[0.99] transition-transform cursor-pointer' : ''}`}
+                style={{ animationDelay: `${idx * 60}ms` }}
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#49b867]/10 flex items-center justify-center shrink-0">
                   <IconComp size={20} className="text-[#49b867]" />
                 </div>
                 <div className="flex-1">
                   <h4 className="font-semibold text-[#252525] text-sm">{feature.name}</h4>
                   <p className="text-xs text-[#6e6e6e] mt-0.5 leading-relaxed">{feature.description}</p>
                 </div>
-                {isPremium && <Check size={18} className="text-[#49b867] flex-shrink-0 mt-1" />}
+                {isPremium && <Check size={18} className="text-[#49b867] shrink-0 mt-1" />}
               </div>
             )
           })}

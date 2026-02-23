@@ -91,12 +91,15 @@ export function CrowdRealMap({
       if (cancelled) return
       if (!mapDivRef.current) return
 
+      const el = mapDivRef.current
+
       if (!mapRef.current) {
         // Default center: Zagreb
         const center = { lat: 45.815, lng: 15.981 }
-        mapRef.current = new maps.Map(mapDivRef.current, {
+        mapRef.current = new maps.Map(el, {
           center,
           zoom: 12,
+          mapTypeId: maps.MapTypeId.ROADMAP,
           disableDefaultUI: true,
           zoomControl: true,
           gestureHandling: 'greedy',
@@ -131,6 +134,11 @@ export function CrowdRealMap({
       if (!bounds.isEmpty()) {
         mapRef.current.fitBounds(bounds, 42)
       }
+
+      // Trigger resize so tiles render (needed when map was in tab or initially hidden)
+      requestAnimationFrame(() => {
+        if (!cancelled && mapRef.current) maps.event.trigger(mapRef.current, 'resize')
+      })
     }
 
     init().catch(() => {
@@ -209,9 +217,13 @@ export function CrowdRealMap({
         </div>
       </div>
 
-      {/* Map area */}
-      <div className="relative h-[320px] bg-[#f3f3f3]">
-        <div ref={mapDivRef} className="absolute inset-0" />
+      {/* Map area - explicit dimensions required for Google Maps tiles */}
+      <div className="relative w-full h-[320px] min-h-[320px] bg-[#e5e3df]">
+        <div
+          ref={mapDivRef}
+          className="absolute inset-0 w-full h-full"
+          style={{ minHeight: 320 }}
+        />
       </div>
 
       {/* Selected panel */}

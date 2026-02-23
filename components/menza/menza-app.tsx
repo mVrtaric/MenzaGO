@@ -20,6 +20,7 @@ import { CrowdScreen } from './screens/crowd-screen'
 import { ProfileScreen } from './screens/profile-screen'
 import { PremiumScreen } from './screens/premium-screen'
 import { DashboardScreen } from './screens/dashboard-screen'
+import { MealPlannerScreen } from './screens/meal-planner-screen'
 
 export function MenzaApp() {
   const currentScreen = useAppStore((s) => s.currentScreen)
@@ -62,6 +63,8 @@ export function MenzaApp() {
         return <PremiumScreen />
       case 'dashboard':
         return <DashboardScreen />
+      case 'meal-planner':
+        return <MealPlannerScreen />
       default:
         return <WelcomeScreen />
     }

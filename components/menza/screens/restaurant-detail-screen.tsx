@@ -1,7 +1,7 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { restaurants } from '@/lib/data'
+import { restaurants, getPromotionsForRestaurant } from '@/lib/data'
 import { StarRating } from '@/components/menza/star-rating'
 import {
   ArrowLeft,
@@ -20,12 +20,14 @@ export function RestaurantDetailScreen() {
     goBack,
     favoriteRestaurants,
     toggleFavoriteRestaurant,
+    selectedCity,
   } = useAppStore()
 
   const restaurant = restaurants.find((r) => r.id === selectedRestaurantId)
   if (!restaurant) return null
 
   const isFav = favoriteRestaurants.includes(restaurant.id)
+  const promotions = getPromotionsForRestaurant(restaurant.id, selectedCity)
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -70,6 +72,45 @@ export function RestaurantDetailScreen() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
+        {/* Sponsored promotions */}
+        {promotions.length > 0 && (
+          <div className="px-5 pt-4 pb-2">
+            {promotions.map((promo) => (
+              <div
+                key={promo.id}
+                className="flex gap-4 p-4 rounded-xl bg-gradient-to-r from-[#fda913]/10 to-[#49b867]/10 border border-[#fda913]/20 mb-3"
+              >
+                {promo.imageUrl && (
+                  <img
+                    src={promo.imageUrl}
+                    alt={promo.title}
+                    className="w-16 h-16 rounded-lg object-cover shrink-0"
+                    crossOrigin="anonymous"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <span className="inline-block px-2 py-0.5 rounded-full bg-[#fda913]/20 text-[#b87800] text-[10px] font-semibold mb-1">
+                    Promocija
+                  </span>
+                  <h3 className="font-semibold text-[#252525] text-sm mb-0.5">{promo.title}</h3>
+                  <p className="text-xs text-[#6e6e6e]">{promo.description}</p>
+                  {promo.ctaLabel && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate('daily-menu')
+                      }}
+                      className="mt-2 text-xs font-semibold text-[#49b867]"
+                    >
+                      {promo.ctaLabel} →
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Rating bar */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-[#e3e3e3]">
           <div className="flex items-center gap-1.5">

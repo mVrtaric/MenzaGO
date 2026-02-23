@@ -15,6 +15,7 @@ import {
   BarChart3,
   Home,
   Star,
+  CalendarDays,
 } from 'lucide-react'
 
 export function Sidebar() {
@@ -83,6 +84,15 @@ export function Sidebar() {
       action: () => {
         setSidebarOpen(false)
         navigate('premium')
+      },
+    },
+    {
+      icon: CalendarDays,
+      label: 'Planer obroka',
+      badge: null,
+      action: () => {
+        setSidebarOpen(false)
+        navigate('meal-planner')
       },
     },
     {
