@@ -1,9 +1,12 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { restaurants, meals, friendActivities } from '@/lib/data'
 import { StarRating } from '@/components/menza/star-rating'
 import { CrowdBadge } from '@/components/menza/screens/restaurants-screen'
+import { computeWeightedCrowdScore } from '@/lib/crowd'
+import { Switch } from '@/components/ui/switch'
 import {
   Menu,
   Flame,
@@ -15,10 +18,55 @@ import {
   Crown,
   TrendingUp,
   Utensils,
+  Leaf,
+  Wallet,
 } from 'lucide-react'
 
+type ExplainTag = {
+  icon: React.ElementType
+  text: string
+  tone: 'green' | 'orange' | 'blue' | 'gray'
+}
+
+function ExplainChip({ tag }: { tag: ExplainTag }) {
+  const toneClass =
+    tag.tone === 'green'
+      ? 'bg-[#49b867]/10 text-[#076639]'
+      : tag.tone === 'orange'
+        ? 'bg-[#f68620]/10 text-[#f68620]'
+        : tag.tone === 'blue'
+          ? 'bg-[#2b7a83]/10 text-[#2b7a83]'
+          : 'bg-[#252525]/5 text-[#6e6e6e]'
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold ${toneClass}`}>
+      <tag.icon size={11} />
+      {tag.text}
+    </span>
+  )
+}
+
 export function HomeScreen() {
-  const { navigate, userName, setSidebarOpen, selectRestaurant, selectMeal, favoriteRestaurants, isPremium, points } = useAppStore()
+  const {
+    navigate,
+    userName,
+    setSidebarOpen,
+    selectRestaurant,
+    selectMeal,
+    favoriteRestaurants,
+    isPremium,
+    selectedCity,
+    budgetMax,
+    isVegetarianFilter,
+    improveRecommendations,
+    setImproveRecommendations,
+    trackMealInteraction,
+  } = useAppStore()
+
+  const crowdReportsByRestaurant = useAppStore((s) => s.crowdReportsByRestaurant)
+  const totalMealInteractions = useAppStore((s) => s.totalMealInteractions)
+  const vegetarianMealInteractions = useAppStore((s) => s.vegetarianMealInteractions)
+  const mealInteractionCounts = useAppStore((s) => s.mealInteractionCounts)
 
   const greeting = () => {
     const hour = new Date().getHours()
@@ -29,9 +77,77 @@ export function HomeScreen() {
 
   const today = new Date().toLocaleDateString('hr-HR', { weekday: 'long', day: 'numeric', month: 'long' })
 
-  const trendingMeals = [...meals].sort((a, b) => (b.trendScore || 0) - (a.trendScore || 0)).slice(0, 4)
-  const recommendedMeals = meals.filter(m => m.rating >= 4.3).slice(0, 3)
-  const favRestaurants = restaurants.filter(r => favoriteRestaurants.includes(r.id)).slice(0, 3)
+  const cityRestaurants = useMemo(() => restaurants.filter((r) => r.city === selectedCity), [selectedCity])
+  const cityRestaurantIds = useMemo(() => new Set(cityRestaurants.map((r) => r.id)), [cityRestaurants])
+  const cityMeals = useMemo(() => meals.filter((m) => cityRestaurantIds.has(m.restaurantId)), [cityRestaurantIds])
+
+  const prefersVegetarianByHistory = totalMealInteractions >= 5 && vegetarianMealInteractions / totalMealInteractions >= 0.6
+
+  const restaurantEffectiveCrowd = useMemo(() => {
+    const now = Date.now()
+    const map: Record<string, 'low' | 'medium' | 'high'> = {}
+    for (const r of cityRestaurants) {
+      const reports = crowdReportsByRestaurant[r.id] ?? []
+      map[r.id] = computeWeightedCrowdScore({ reports, fallbackLevel: r.crowdLevel, now }).level
+    }
+    return map
+  }, [cityRestaurants, crowdReportsByRestaurant])
+
+  const trendingMeals = useMemo(() => {
+    return [...cityMeals].sort((a, b) => (b.trendScore || 0) - (a.trendScore || 0)).slice(0, 4)
+  }, [cityMeals])
+
+  const recommendedMeals = useMemo(() => {
+    if (!improveRecommendations) return cityMeals.filter((m) => m.rating >= 4.3).slice(0, 3)
+
+    const scoreMeal = (m: (typeof meals)[number]) => {
+      const crowd = restaurantEffectiveCrowd[m.restaurantId]
+      const inBudget = budgetMax == null ? null : m.price <= budgetMax
+      const clicked = mealInteractionCounts[m.id] ?? 0
+
+      let score = m.rating * 10 + (m.trendScore ?? 0) * 0.2
+
+      if (favoriteRestaurants.includes(m.restaurantId)) score += 6
+
+      if (crowd === 'low') score += 4
+      if (crowd === 'high') score -= 4
+
+      if (budgetMax != null) {
+        score += inBudget ? 4 : -6
+      }
+
+      const prefersVeg = isVegetarianFilter || prefersVegetarianByHistory
+      if (m.isVegetarian && prefersVeg) score += 5
+      if (!m.isVegetarian && isVegetarianFilter) score -= 10
+
+      score += Math.min(6, clicked * 2)
+      return score
+    }
+
+    return [...cityMeals].sort((a, b) => scoreMeal(b) - scoreMeal(a)).slice(0, 3)
+  }, [improveRecommendations, cityMeals, restaurantEffectiveCrowd, budgetMax, favoriteRestaurants, isVegetarianFilter, prefersVegetarianByHistory, mealInteractionCounts])
+
+  const favRestaurants = useMemo(() => cityRestaurants.filter((r) => favoriteRestaurants.includes(r.id)).slice(0, 3), [cityRestaurants, favoriteRestaurants])
+
+  const explanationForMeal = (meal: (typeof meals)[number]): ExplainTag[] => {
+    const tags: ExplainTag[] = []
+
+    const crowd = restaurantEffectiveCrowd[meal.restaurantId]
+    if (crowd === 'low') tags.push({ icon: Users, text: 'Mala guzva sada', tone: 'green' })
+
+    if (budgetMax != null && meal.price <= budgetMax) tags.push({ icon: Wallet, text: 'U budzetu', tone: 'blue' })
+
+    const prefersVeg = isVegetarianFilter || prefersVegetarianByHistory
+    if (meal.isVegetarian && prefersVeg) {
+      tags.push({ icon: Leaf, text: isVegetarianFilter ? 'Jer biras vege' : 'Cesto biras vege', tone: 'green' })
+    }
+
+    if (favoriteRestaurants.includes(meal.restaurantId)) tags.push({ icon: Heart, text: 'Tvoj favorit', tone: 'orange' })
+
+    if (!tags.length) tags.push({ icon: Sparkles, text: 'Visoka ocjena', tone: 'gray' })
+
+    return tags.slice(0, 2)
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#f3f3f3]">
@@ -83,41 +199,68 @@ export function HomeScreen() {
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pt-5 pb-6">
-
         {/* AI Recommendations */}
         <section className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles size={16} className="text-[#49b867]" />
-            <h2 className="text-sm font-bold text-[#252525]">Preporuceno za tebe</h2>
-          </div>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide -mx-5 px-5 pb-1">
-            {recommendedMeals.map((meal) => (
-              <div
-                key={meal.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => { selectMeal(meal.id); navigate('meal-detail') }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { selectMeal(meal.id); navigate('meal-detail') } }}
-                className="min-w-[200px] bg-background rounded-2xl overflow-hidden shadow-sm active:scale-[0.98] transition-transform cursor-pointer"
-              >
-                <div className="relative h-24">
-                  <img src={meal.imageUrl} alt={meal.name} className="w-full h-full object-cover" crossOrigin="anonymous" />
-                  <div className="absolute top-2 left-2">
-                    <span className="px-2 py-0.5 rounded-full bg-[#49b867] text-[#ffffff] text-[10px] font-semibold flex items-center gap-1">
-                      <Sparkles size={9} />
-                      Za tebe
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3">
-                  <h3 className="font-semibold text-[#252525] text-xs mb-1 line-clamp-1">{meal.name}</h3>
-                  <div className="flex items-center justify-between">
-                    <StarRating rating={meal.rating} size={10} />
-                    <span className="text-sm font-bold text-[#49b867]">{meal.price.toFixed(2)} &euro;</span>
-                  </div>
-                </div>
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-[#49b867]" />
+              <div>
+                <h2 className="text-sm font-bold text-[#252525]">Preporuceno za tebe</h2>
+                <p className="text-[10px] text-[#6e6e6e]">Zasto ovo vidis: pogledaj tagove</p>
               </div>
-            ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-[#6e6e6e] font-medium">Poboljsaj</span>
+              <Switch checked={improveRecommendations} onCheckedChange={setImproveRecommendations} />
+            </div>
+          </div>
+
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide -mx-5 px-5 pb-1">
+            {recommendedMeals.map((meal) => {
+              const explain = explanationForMeal(meal)
+              return (
+                <div
+                  key={meal.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    trackMealInteraction({ mealId: meal.id, restaurantId: meal.restaurantId, isVegetarian: meal.isVegetarian })
+                    selectMeal(meal.id)
+                    navigate('meal-detail')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      trackMealInteraction({ mealId: meal.id, restaurantId: meal.restaurantId, isVegetarian: meal.isVegetarian })
+                      selectMeal(meal.id)
+                      navigate('meal-detail')
+                    }
+                  }}
+                  className="min-w-[220px] bg-background rounded-2xl overflow-hidden shadow-sm active:scale-[0.98] transition-transform cursor-pointer"
+                >
+                  <div className="relative h-24">
+                    <img src={meal.imageUrl} alt={meal.name} className="w-full h-full object-cover" crossOrigin="anonymous" />
+                    <div className="absolute top-2 left-2">
+                      <span className="px-2 py-0.5 rounded-full bg-[#49b867] text-[#ffffff] text-[10px] font-semibold flex items-center gap-1">
+                        <Sparkles size={9} />
+                        Za tebe
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <h3 className="font-semibold text-[#252525] text-xs mb-2 line-clamp-1">{meal.name}</h3>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {explain.map((t) => (
+                        <ExplainChip key={t.text} tag={t} />
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <StarRating rating={meal.rating} size={10} />
+                      <span className="text-sm font-bold text-[#49b867]">{meal.price.toFixed(2)} &euro;</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </section>
 
@@ -131,18 +274,30 @@ export function HomeScreen() {
           </div>
           <div className="flex flex-col gap-2">
             {trendingMeals.map((meal, idx) => {
-              const rest = restaurants.find(r => r.id === meal.restaurantId)
+              const rest = restaurants.find((r) => r.id === meal.restaurantId)
               return (
                 <div
                   key={meal.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => { selectMeal(meal.id); navigate('meal-detail') }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { selectMeal(meal.id); navigate('meal-detail') } }}
+                  onClick={() => {
+                    trackMealInteraction({ mealId: meal.id, restaurantId: meal.restaurantId, isVegetarian: meal.isVegetarian })
+                    selectMeal(meal.id)
+                    navigate('meal-detail')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      trackMealInteraction({ mealId: meal.id, restaurantId: meal.restaurantId, isVegetarian: meal.isVegetarian })
+                      selectMeal(meal.id)
+                      navigate('meal-detail')
+                    }
+                  }}
                   className="flex items-center gap-3 p-3 bg-background rounded-xl active:scale-[0.98] transition-transform cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-full bg-[#f3f3f3] flex items-center justify-center flex-shrink-0">
-                    <span className={`text-sm font-bold ${idx === 0 ? 'text-[#fda913]' : idx === 1 ? 'text-[#afafaf]' : 'text-[#c87533]'}`}>
+                    <span
+                      className={`text-sm font-bold ${idx === 0 ? 'text-[#fda913]' : idx === 1 ? 'text-[#afafaf]' : 'text-[#c87533]'}`}
+                    >
                       {idx + 1}
                     </span>
                   </div>
@@ -175,8 +330,16 @@ export function HomeScreen() {
                 key={restaurant.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => { selectRestaurant(restaurant.id); navigate('restaurant-detail') }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { selectRestaurant(restaurant.id); navigate('restaurant-detail') } }}
+                onClick={() => {
+                  selectRestaurant(restaurant.id)
+                  navigate('restaurant-detail')
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    selectRestaurant(restaurant.id)
+                    navigate('restaurant-detail')
+                  }
+                }}
                 className="flex items-center gap-3 p-3 bg-background rounded-xl active:scale-[0.98] transition-transform cursor-pointer"
               >
                 <img src={restaurant.imageUrl} alt={restaurant.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" crossOrigin="anonymous" />

@@ -56,6 +56,13 @@ interface AppState {
   crowdAnomalyUntilByRestaurant: Record<string, number | undefined>
   verifiedCrowdByRestaurant: Record<string, boolean>
 
+  // Recommendation learning
+  improveRecommendations: boolean
+  totalMealInteractions: number
+  vegetarianMealInteractions: number
+  mealInteractionCounts: Record<string, number>
+  restaurantInteractionCounts: Record<string, number>
+
   // Actions
   navigate: (screen: Screen) => void
   goBack: () => void
@@ -76,6 +83,8 @@ interface AppState {
   setBudgetMax: (max: number | null) => void
   addSpending: (amount: number) => void
   earnBadge: (id: string) => void
+  setImproveRecommendations: (enabled: boolean) => void
+  trackMealInteraction: (input: { mealId: string; restaurantId: string; isVegetarian: boolean }) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -112,6 +121,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   crowdReportsByRestaurant: {},
   crowdAnomalyUntilByRestaurant: {},
   verifiedCrowdByRestaurant: {},
+
+  // Recommendation learning
+  improveRecommendations: true,
+  totalMealInteractions: 0,
+  vegetarianMealInteractions: 0,
+  mealInteractionCounts: {},
+  restaurantInteractionCounts: {},
 
   navigate: (screen) =>
     set((state) => ({
@@ -188,7 +204,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       const spikeByVolume = window5m.length >= Math.max(4, Math.ceil(baselinePer5m * 6))
       const spikeByChange = window5m.length >= 3 && Math.abs(nextScore - prevScore) >= 25
 
-      const anomalyUntil = (spikeByVolume || spikeByChange) ? now + 15 * 60 * 1000 : state.crowdAnomalyUntilByRestaurant[restaurantId]
+      const anomalyUntil =
+        spikeByVolume || spikeByChange
+          ? now + 15 * 60 * 1000
+          : state.crowdAnomalyUntilByRestaurant[restaurantId]
 
       return {
         crowdReports: state.crowdReports + 1,
@@ -228,5 +247,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   earnBadge: (id) =>
     set((state) => ({
       earnedBadges: state.earnedBadges.includes(id) ? state.earnedBadges : [...state.earnedBadges, id],
+    })),
+
+  setImproveRecommendations: (enabled) => set({ improveRecommendations: enabled }),
+
+  trackMealInteraction: ({ mealId, restaurantId, isVegetarian }) =>
+    set((state) => ({
+      totalMealInteractions: state.totalMealInteractions + 1,
+      vegetarianMealInteractions: state.vegetarianMealInteractions + (isVegetarian ? 1 : 0),
+      mealInteractionCounts: {
+        ...state.mealInteractionCounts,
+        [mealId]: (state.mealInteractionCounts[mealId] ?? 0) + 1,
+      },
+      restaurantInteractionCounts: {
+        ...state.restaurantInteractionCounts,
+        [restaurantId]: (state.restaurantInteractionCounts[restaurantId] ?? 0) + 1,
+      },
     })),
 }))
